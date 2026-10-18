@@ -239,7 +239,16 @@ mongoose
 
 // --- API ROUTES ---
 
-// Health & Info
+// Lightweight Health-Check Endpoint (for Render, Cloud Health Checks & Monitoring)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'Padhlo Backend',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Detailed Health & Service Status
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
