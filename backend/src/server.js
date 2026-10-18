@@ -239,6 +239,15 @@ mongoose
 
 // --- API ROUTES ---
 
+// Root Service Ping Endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: 'Padhlo Backend is running',
+    status: 'ok',
+    health: '/health',
+  });
+});
+
 // Lightweight Health-Check Endpoint (for Render, Cloud Health Checks & Monitoring)
 app.get('/health', (req, res) => {
   res.status(200).json({
