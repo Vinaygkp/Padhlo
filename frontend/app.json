@@ -20,21 +20,33 @@
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-updates"
     ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "18ef3f77-3912-4086-946d-fafdc3aabebb"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/18ef3f77-3912-4086-946d-fafdc3aabebb",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

@@ -288,6 +288,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// App Version & Remote Update Manifest for Native APK Updates
+app.get('/api/app/version', (req, res) => {
+  res.json({
+    latestVersion: process.env.APP_LATEST_VERSION || '1.0.0',
+    minimumSupportedVersion: process.env.APP_MIN_SUPPORTED_VERSION || '1.0.0',
+    apkUrl: process.env.APP_APK_URL || 'https://github.com/vinay-55/Padhlo-App/releases/latest/download/padhlo.apk',
+    releaseNotes: process.env.APP_RELEASE_NOTES || 'Performance enhancements, bug fixes, and improved offline study experience.',
+    updateRequired: process.env.APP_UPDATE_REQUIRED === 'true',
+    publishedAt: process.env.APP_UPDATE_PUBLISHED_AT || new Date().toISOString(),
+  });
+});
+app.get('/api/version', (req, res) => res.redirect('/api/app/version'));
+
 // Storage Status & Cloud Storage Information
 app.get('/api/storage/status', (req, res) => {
   const activeProvider = storageService.getActiveProvider();
