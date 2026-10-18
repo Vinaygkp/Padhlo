@@ -190,14 +190,9 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             <View style={styles.profileDetails}>
-              <TouchableOpacity 
-                onPress={openPortfolio} 
-                activeOpacity={0.7}
-              >
-                <Text style={styles.profileName} numberOfLines={1}>
-                  {currentUser?.name || 'Student'} ↗
-                </Text>
-              </TouchableOpacity>
+              <Text style={styles.profileName} numberOfLines={1}>
+                {currentUser?.name || 'Student'}
+              </Text>
               <Text style={styles.profileEmail} numberOfLines={1}>{currentUser?.email}</Text>
               {currentUser?.mobile ? (
                 <Text style={styles.profileSubMobile}>📱 {currentUser.mobile}</Text>

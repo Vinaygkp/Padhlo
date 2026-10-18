@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BookOpen, Eye, EyeOff, KeyRound, RotateCw } from 'lucide-react-native';
+import { BookOpen, CheckCircle2, Eye, EyeOff, RotateCw } from 'lucide-react-native';
 import { THEME } from '@/constants/theme';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
@@ -32,7 +32,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -79,7 +79,7 @@ export default function LoginScreen() {
     }
 
     setError('');
-    setInfoMessage('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -88,7 +88,7 @@ export default function LoginScreen() {
       if (res.success) {
         setOtpStep(2);
         setCooldown(res.cooldownSeconds || 45);
-        setInfoMessage(res.message);
+        setSuccessMessage('OTP sent successfully.');
       } else {
         setError(res.message || 'Failed to send OTP.');
       }
@@ -106,6 +106,7 @@ export default function LoginScreen() {
     }
 
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -147,7 +148,7 @@ export default function LoginScreen() {
             <View style={styles.tabSwitchContainer}>
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={() => { setAuthMode('PASSWORD'); setError(''); setInfoMessage(''); }}
+                onPress={() => { setAuthMode('PASSWORD'); setError(''); setSuccessMessage(''); }}
                 style={[styles.tabSwitchBtn, authMode === 'PASSWORD' && styles.tabSwitchBtnActive]}
               >
                 <Text style={[styles.tabSwitchText, authMode === 'PASSWORD' && styles.tabSwitchTextActive]}>
@@ -157,7 +158,7 @@ export default function LoginScreen() {
 
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={() => { setAuthMode('OTP'); setOtpStep(1); setError(''); setInfoMessage(''); }}
+                onPress={() => { setAuthMode('OTP'); setOtpStep(1); setError(''); setSuccessMessage(''); }}
                 style={[styles.tabSwitchBtn, authMode === 'OTP' && styles.tabSwitchBtnActive]}
               >
                 <Text style={[styles.tabSwitchText, authMode === 'OTP' && styles.tabSwitchTextActive]}>
@@ -183,9 +184,10 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {infoMessage ? (
-              <View style={styles.infoBox}>
-                <Text style={styles.infoText}>{infoMessage}</Text>
+            {successMessage ? (
+              <View style={styles.successBox}>
+                <CheckCircle2 size={15} color={THEME.green} />
+                <Text style={styles.successText}>{successMessage}</Text>
               </View>
             ) : null}
 
@@ -256,13 +258,6 @@ export default function LoginScreen() {
                   </>
                 ) : (
                   <>
-                    <View style={styles.otpHeaderBox}>
-                      <View style={styles.otpIconCircle}>
-                        <KeyRound size={22} color={THEME.cyan} />
-                      </View>
-                      <Text style={styles.otpTargetText}>We sent a verification code to <Text style={styles.boldText}>{email}</Text></Text>
-                    </View>
-
                     <Input
                       label="Verification code"
                       value={otpCode}
@@ -282,9 +277,7 @@ export default function LoginScreen() {
                     />
 
                     <View style={styles.resendRow}>
-                      {cooldown > 0 ? (
-                        <Text style={styles.cooldownText}>You can request another code in {cooldown} seconds.</Text>
-                      ) : (
+                      {cooldown === 0 && (
                         <TouchableOpacity onPress={handleSendLoginOtp} disabled={loading} style={styles.resendBtn}>
                           <RotateCw size={14} color={THEME.purple} />
                           <Text style={styles.resendBtnText}>Resend code</Text>
@@ -424,18 +417,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  infoBox: {
-    backgroundColor: THEME.purpleMuted,
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: THEME.greenMuted,
     borderWidth: 1,
-    borderColor: THEME.purple,
-    borderRadius: 10,
-    padding: 12,
+    borderColor: THEME.green + '40',
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     marginBottom: 16,
   },
-  infoText: {
-    color: THEME.textPrimary,
+  successText: {
+    color: THEME.green,
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   forgotBtn: {
     alignSelf: 'flex-end',
@@ -450,36 +447,9 @@ const styles = StyleSheet.create({
   loginBtn: {
     marginBottom: 20,
   },
-  otpHeaderBox: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  otpIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: THEME.cyanMuted,
-    borderWidth: 1,
-    borderColor: THEME.cyan + '40',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  otpTargetText: {
-    color: THEME.textSecondary,
-    fontSize: 13,
-  },
-  boldText: {
-    color: THEME.cyan,
-    fontWeight: '700',
-  },
   resendRow: {
     alignItems: 'center',
     marginBottom: 16,
-  },
-  cooldownText: {
-    color: THEME.textTertiary,
-    fontSize: 12,
   },
   resendBtn: {
     flexDirection: 'row',

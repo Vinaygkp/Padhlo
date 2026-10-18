@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Eye, EyeOff, ArrowLeft, ShieldAlert, KeyRound, RotateCw } from 'lucide-react-native';
+import { Eye, EyeOff, ArrowLeft, ShieldAlert, KeyRound, RotateCw, CheckCircle2 } from 'lucide-react-native';
 import { THEME } from '@/constants/theme';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
@@ -43,7 +43,7 @@ export default function RegisterScreen() {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [infoMessage, setInfoMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [cooldown, setCooldown] = useState(0);
 
   // Countdown timer for resend OTP cooldown
@@ -96,7 +96,7 @@ export default function RegisterScreen() {
     }
 
     setError('');
-    setInfoMessage('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -105,7 +105,7 @@ export default function RegisterScreen() {
       if (res.success) {
         setOtpStep(2);
         setCooldown(res.cooldownSeconds || 45);
-        setInfoMessage(res.message);
+        setSuccessMessage('OTP sent successfully.');
       } else {
         if (res.code === 'EMAIL_ALREADY_EXISTS' || res.message?.toLowerCase().includes('already exists')) {
           Alert.alert(
@@ -139,13 +139,14 @@ export default function RegisterScreen() {
   const handleResendOtp = async () => {
     if (cooldown > 0 || loading) return;
     setError('');
+    setSuccessMessage('');
     setLoading(true);
     try {
       const res = await sendOtp(email.trim().toLowerCase(), 'REGISTRATION');
       setLoading(false);
       if (res.success) {
         setCooldown(res.cooldownSeconds || 45);
-        setInfoMessage(`New verification code sent to ${email.trim()}`);
+        setSuccessMessage('OTP sent successfully.');
       } else {
         setError(res.message || 'Failed to resend code.');
       }
@@ -168,6 +169,7 @@ export default function RegisterScreen() {
     }
 
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -250,9 +252,10 @@ export default function RegisterScreen() {
               </View>
             ) : null}
 
-            {infoMessage ? (
-              <View style={styles.infoBox}>
-                <Text style={styles.infoText}>{infoMessage}</Text>
+            {successMessage ? (
+              <View style={styles.successBox}>
+                <CheckCircle2 size={15} color={THEME.green} />
+                <Text style={styles.successText}>{successMessage}</Text>
               </View>
             ) : null}
 
@@ -328,14 +331,6 @@ export default function RegisterScreen() {
             ) : (
               // Step 2: OTP Entry & Verification
               <View style={styles.otpStepWrap}>
-                <View style={styles.otpHeaderBox}>
-                  <View style={styles.otpIconCircle}>
-                    <KeyRound size={22} color={THEME.cyan} />
-                  </View>
-                  <Text style={styles.otpTargetText}>We sent a verification code to <Text style={styles.boldText}>{email}</Text></Text>
-                  <Text style={styles.otpSubText}>Enter the 6-digit code below to activate your student account.</Text>
-                </View>
-
                 <Input
                   label="Verification code"
                   value={otp}
@@ -354,9 +349,7 @@ export default function RegisterScreen() {
                 />
 
                 <View style={styles.resendRow}>
-                  {cooldown > 0 ? (
-                    <Text style={styles.cooldownText}>You can request another code in {cooldown} seconds.</Text>
-                  ) : (
+                  {cooldown === 0 && (
                     <TouchableOpacity onPress={handleResendOtp} disabled={loading} style={styles.resendBtn}>
                       <RotateCw size={14} color={THEME.purple} />
                       <Text style={styles.resendBtnText}>Resend code</Text>
@@ -470,18 +463,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  infoBox: {
-    backgroundColor: THEME.purpleMuted,
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: THEME.greenMuted,
     borderWidth: 1,
-    borderColor: THEME.purple,
-    borderRadius: 10,
-    padding: 12,
+    borderColor: THEME.green + '40',
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     marginBottom: 16,
   },
-  infoText: {
-    color: THEME.textPrimary,
+  successText: {
+    color: THEME.green,
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   submitBtn: {
     marginTop: 8,
@@ -502,42 +499,10 @@ const styles = StyleSheet.create({
   otpStepWrap: {
     paddingVertical: 4,
   },
-  otpHeaderBox: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  otpIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: THEME.cyanMuted,
-    borderWidth: 1,
-    borderColor: THEME.cyan + '40',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  otpTargetText: {
-    color: THEME.textPrimary,
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  boldText: {
-    fontWeight: '700',
-    color: THEME.cyan,
-  },
-  otpSubText: {
-    color: THEME.textTertiary,
-    fontSize: 12,
-  },
   resendRow: {
     alignItems: 'center',
     marginTop: 16,
     marginBottom: 8,
-  },
-  cooldownText: {
-    color: THEME.textTertiary,
-    fontSize: 13,
   },
   resendBtn: {
     flexDirection: 'row',
