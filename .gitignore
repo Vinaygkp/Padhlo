@@ -1,0 +1,53 @@
+# Dependencies (Root, Frontend, Backend)
+node_modules/
+.pnp
+.pnp.js
+
+# Environment & Secrets
+.env
+.env.*
+.env*.local
+*.env
+*.pem
+*.key
+
+# Expo & React Native
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Native Builds (Continuous Native Generation)
+/ios
+/android
+ios/
+android/
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+
+# Backend Uploads & Storage
+backend/uploads/
+uploads/
+
+# Logs & Debugging
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

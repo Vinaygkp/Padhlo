@@ -1,0 +1,18 @@
+{
+  "name": "padhlo-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Padhlo - College Student Productivity Application",
+  "scripts": {
+    "start": "npm --prefix frontend start",
+    "android": "npm --prefix frontend run android",
+    "ios": "npm --prefix frontend run ios",
+    "web": "npm --prefix frontend run web",
+    "frontend": "npm --prefix frontend start",
+    "backend": "npm --prefix backend start",
+    "backend:dev": "npm --prefix backend run dev",
+    "dev": "npm --prefix frontend start",
+    "lint": "npm --prefix frontend run lint",
+    "typecheck": "npm --prefix frontend run typecheck"
+  }
+}
