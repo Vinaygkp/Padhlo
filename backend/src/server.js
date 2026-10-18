@@ -277,7 +277,10 @@ app.get('/api/health', (req, res) => {
       openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
     },
     otp: {
+      provider: 'RESEND_HTTPS_API',
       resendConfigured: Boolean(process.env.RESEND_API_KEY),
+      resendFromConfigured: Boolean(process.env.RESEND_FROM || process.env.EMAIL_FROM),
+      emailFromConfigured: Boolean(process.env.RESEND_FROM || process.env.EMAIL_FROM),
       twilioConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_PHONE_NUMBER),
     },
     version: '1.0.0',
@@ -434,7 +437,7 @@ app.post('/api/auth/otp/send', otpLimiter, async (req, res) => {
     if (!deliveryResult || !deliveryResult.success) {
       return res.status(502).json({
         success: false,
-        message: deliveryResult?.error || 'Failed to dispatch verification email. Please check server SMTP configuration.',
+        message: deliveryResult?.error || 'Failed to dispatch verification email. Please check server email service configuration.',
       });
     }
 

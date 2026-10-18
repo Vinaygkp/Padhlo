@@ -3,11 +3,13 @@ node_modules/
 .pnp
 .pnp.js
 
-# Environment & Secrets
+# Environment & Secrets (Never commit secrets)
 .env
 .env.*
 .env*.local
 *.env
+!.env.example
+!*.env.example
 *.pem
 *.key
 

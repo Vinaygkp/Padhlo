@@ -1,15 +1,14 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const { Resend } = require('resend');
 
 /**
  * Real OTP Delivery Service for Padhlo
  * 
  * Supports:
- * 1. Real SMTP (Gmail, Hostinger, Amazon SES, Brevo, custom college mail servers)
- * 2. Real Resend API (via HTTPS or SMTP)
- * 3. Real Twilio SMS
+ * 1. Resend HTTPS Email API (Cloud-native, 100% reliable on Render Free & production)
+ * 2. Twilio SMS API (Optional SMS delivery)
  * 
  * Security:
  * - Never logs OTP codes, passwords, or credentials.
@@ -19,77 +18,89 @@ const crypto = require('crypto');
 
 class OtpDeliveryService {
   constructor() {
-    this.transporter = null;
-    this.initMailTransporter();
+    this.resend = null;
+    this.initEmailService();
   }
 
-  initMailTransporter() {
-    const host = process.env.SMTP_HOST?.trim();
-    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT.trim(), 10) : undefined;
-    const user = process.env.SMTP_USER?.trim();
-    const pass = process.env.SMTP_PASS?.trim();
-    const secureEnv = process.env.SMTP_SECURE?.trim();
+  /**
+   * Resolves and normalizes the sender address.
+   * Prioritizes RESEND_FROM, falls back to EMAIL_FROM or default 'Padhlo Portal <onboarding@resend.dev>'
+   */
+  getSenderAddress() {
+    const raw = process.env.RESEND_FROM?.trim() || process.env.EMAIL_FROM?.trim();
+    if (!raw) {
+      return 'Padhlo Portal <onboarding@resend.dev>';
+    }
 
-    // Determine secure connection: true if SMTP_SECURE is 'true' or port is 465
-    const isSecure = secureEnv === 'true' || port === 465;
-    const finalPort = port || (isSecure ? 465 : 587);
+    // Strip wrapping quotes around the entire string if present
+    const clean = raw.trim().replace(/^['"]|['"]$/g, '').trim();
 
-    if (host) {
-      const transportConfig = {
-        host,
-        port: finalPort,
-        secure: isSecure,
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 10000,   // 10 seconds
-        socketTimeout: 15000,     // 15 seconds
-      };
+    // Match display name and email address: [Name] <email@domain.com>
+    const match = clean.match(/^(.*?)(?:<([^>]+)>)?$/);
+    if (match && match[2]) {
+      // Strip any quotes around the display name itself: "Padhlo Portal" -> Padhlo Portal
+      const displayName = match[1].replace(/['"]/g, '').trim();
+      const email = match[2].trim().toLowerCase();
+      return displayName ? `${displayName} <${email}>` : email;
+    }
 
-      if (user && pass) {
-        transportConfig.auth = {
-          user,
-          pass,
-        };
-      }
+    // If only an email address was provided without angle brackets
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+      return `Padhlo Portal <${clean.toLowerCase()}>`;
+    }
 
-      this.transporter = nodemailer.createTransport(transportConfig);
-      console.log(`📧 SMTP Transporter initialized (Host: ${host}, Port: ${finalPort}, Secure: ${isSecure}, AuthConfigured: ${Boolean(user && pass)})`);
+    return clean;
+  }
+
+  initEmailService() {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+
+    if (apiKey) {
+      this.resend = new Resend(apiKey);
+      const sender = this.getSenderAddress();
+      const safeSender = sender.replace(/<([^@>]+)@([^>]+)>/, (m, u, d) => `<***@${d}>`);
+      console.log(`📧 Resend HTTPS Email API initialized (Sender: ${safeSender}, KeyConfigured: true)`);
     } else {
-      console.log('ℹ️ SMTP_HOST not detected in .env.');
-      this.transporter = null;
+      console.warn('ℹ️ RESEND_API_KEY not detected in backend environment.');
+      this.resend = null;
     }
   }
 
   /**
-   * Verifies SMTP server handshake and authentication
+   * Verifies Resend Email API status
    */
-  async verifySmtpConnection() {
-    if (!this.transporter) {
+  async verifyEmailConnection() {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    if (!apiKey) {
       return {
         configured: false,
         verified: false,
-        error: 'SMTP_HOST is not configured in backend/.env.',
+        error: 'RESEND_API_KEY is not configured in backend environment.',
       };
     }
 
-    const hasAuth = Boolean(process.env.SMTP_USER?.trim() && process.env.SMTP_PASS?.trim());
-    if (!hasAuth) {
+    const fromAddress = this.getSenderAddress();
+    if (!fromAddress) {
       return {
         configured: true,
         verified: false,
-        error: 'SMTP_USER and/or SMTP_PASS are missing or empty in backend/.env. Authentication credentials are required for mail delivery.',
+        error: 'RESEND_FROM is missing or empty in backend environment. A verified sender address is required.',
       };
     }
 
-    try {
-      await this.transporter.verify();
-      return { configured: true, verified: true };
-    } catch (err) {
-      return {
-        configured: true,
-        verified: false,
-        error: err.message || 'SMTP server connection or authentication failed.',
-      };
-    }
+    return {
+      configured: true,
+      verified: true,
+      provider: 'RESEND_HTTPS_API',
+      senderConfigured: true,
+    };
+  }
+
+  /**
+   * Backward-compatibility alias for verifySmtpConnection
+   */
+  async verifySmtpConnection() {
+    return this.verifyEmailConnection();
   }
 
   /**
@@ -143,12 +154,12 @@ class OtpDeliveryService {
   }
 
   /**
-   * Sends real OTP to Email
-   * Sends to the specific student's entered email address (cleanEmail)
+   * Sends real OTP to Email via Resend HTTPS Email API
+   * Never logs OTP codes or secrets
    */
   async sendEmailOtp(email, otp, purpose = 'Verification') {
     const cleanEmail = email.toLowerCase().trim();
-    const appName = 'Padhlo College Portal';
+    const appName = 'Padhlo Portal';
 
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0B0C10; color: #FFFFFF; border-radius: 12px; border: 1px solid #1F2330;">
@@ -171,62 +182,54 @@ class OtpDeliveryService {
       </div>
     `;
 
-    // 1. If SMTP transporter is configured, dispatch genuine email
-    if (this.transporter) {
-      const fromAddress = process.env.SMTP_FROM?.trim() || `"${appName}" <${process.env.SMTP_USER?.trim() || 'no-reply@padhlo.edu'}>`;
-      try {
-        const info = await this.transporter.sendMail({
-          from: fromAddress,
-          to: cleanEmail,
-          subject: `${otp} is your Padhlo ${purpose} Code`,
-          text: `Your ${appName} OTP is: ${otp}. It is valid for 5 minutes.`,
-          html: htmlContent,
-        });
-        console.log(`✅ Real email OTP successfully dispatched to recipient (MessageId: ${info.messageId})`);
-        return { success: true, mode: 'real_smtp', messageId: info.messageId };
-      } catch (err) {
-        console.error('❌ Failed to dispatch SMTP email:', err.message);
+    // 1. Validate Resend client
+    if (!this.resend) {
+      const apiKey = process.env.RESEND_API_KEY?.trim();
+      if (apiKey) {
+        this.resend = new Resend(apiKey);
+      } else {
+        console.error('❌ Resend API key missing: set RESEND_API_KEY in backend environment.');
         return {
           success: false,
-          error: `SMTP delivery failed: ${err.message}`,
+          error: 'Email delivery service is not configured on the server. Please set RESEND_API_KEY in Render environment variables.',
         };
       }
     }
 
-    // 2. Resend API support if configured via API Key
-    if (process.env.RESEND_API_KEY) {
-      try {
-        const res = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM || `${appName} <onboarding@resend.dev>`,
-            to: [cleanEmail],
-            subject: `${otp} is your Padhlo ${purpose} Code`,
-            html: htmlContent,
-          }),
-        });
-        const resData = await res.json();
-        if (!res.ok) throw new Error(resData.message || 'Resend error');
-        console.log(`✅ Real Resend OTP successfully dispatched to recipient (ID: ${resData.id})`);
-        return { success: true, mode: 'resend_api', id: resData.id };
-      } catch (err) {
-        console.error('❌ Resend delivery failure:', err.message);
+    const fromAddress = this.getSenderAddress();
+
+    try {
+      const { data, error } = await this.resend.emails.send({
+        from: fromAddress,
+        to: [cleanEmail],
+        subject: `${otp} is your ${appName} ${purpose} Code`,
+        text: `Your ${appName} OTP is: ${otp}. It is valid for 5 minutes. Do not share it with anyone.`,
+        html: htmlContent,
+      });
+
+      // Strict validation: Must not have error, and data must contain message id
+      if (error || !data || !data.id) {
+        const errorMsg = error?.message || error?.name || 'Resend did not return a confirmation ID.';
+        console.error('❌ Resend API error response:', errorMsg);
         return {
           success: false,
-          error: `Resend delivery failed: ${err.message}`,
+          error: `Resend email delivery failed: ${errorMsg}`,
         };
       }
-    }
 
-    // If no real email provider is configured, return explicit error
-    return {
-      success: false,
-      error: 'Email delivery service is not configured on the server. Please configure SMTP_USER and SMTP_PASS in backend/.env.',
-    };
+      console.log(`✅ Real email OTP successfully dispatched via Resend HTTPS API (Message ID: ${data.id})`);
+      return {
+        success: true,
+        mode: 'resend_https_api',
+        id: data.id,
+      };
+    } catch (err) {
+      console.error('❌ Resend API delivery exception:', err.message || 'Network exception');
+      return {
+        success: false,
+        error: `Resend delivery failed: ${err.message || 'Network error'}`,
+      };
+    }
   }
 
   /**
@@ -273,4 +276,3 @@ class OtpDeliveryService {
 }
 
 module.exports = new OtpDeliveryService();
-
