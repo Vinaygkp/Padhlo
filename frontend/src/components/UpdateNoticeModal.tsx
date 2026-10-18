@@ -110,7 +110,7 @@ export const UpdateNoticeModal: React.FC<UpdateNoticeModalProps> = ({
 
           {/* Required User-Facing Message */}
           <Text style={styles.message}>
-            We’ve improved your study experience. Update Padhlo to get the latest features and fixes.
+            {"We've improved your study experience. Update Padhlo to get the latest features and fixes."}
           </Text>
 
           {/* Release Notes if provided */}

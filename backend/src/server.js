@@ -289,17 +289,76 @@ app.get('/api/health', (req, res) => {
 });
 
 // App Version & Remote Update Manifest for Native APK Updates
-app.get('/api/app/version', (req, res) => {
-  res.json({
-    latestVersion: process.env.APP_LATEST_VERSION || '1.0.0',
-    minimumSupportedVersion: process.env.APP_MIN_SUPPORTED_VERSION || '1.0.0',
-    apkUrl: process.env.APP_APK_URL || 'https://github.com/vinay-55/Padhlo-App/releases/latest/download/padhlo.apk',
-    releaseNotes: process.env.APP_RELEASE_NOTES || 'Performance enhancements, bug fixes, and improved offline study experience.',
-    updateRequired: process.env.APP_UPDATE_REQUIRED === 'true',
-    publishedAt: process.env.APP_UPDATE_PUBLISHED_AT || new Date().toISOString(),
+const handleAppUpdateCheck = (req, res) => {
+  const latestVersion = (process.env.APP_LATEST_VERSION || '').trim();
+  const apkUrl = (process.env.APP_APK_URL || '').trim();
+  const minVersion = (process.env.APP_MIN_SUPPORTED_VERSION || '').trim() || latestVersion;
+  const releaseNotes = (process.env.APP_RELEASE_NOTES || '').trim() || "We've improved your study experience. Update Padhlo to get the latest features and fixes.";
+  const updateRequired = process.env.APP_UPDATE_REQUIRED === 'true';
+  const publishedAt = (process.env.APP_UPDATE_PUBLISHED_AT || '').trim() || new Date().toISOString();
+
+  // 1. Check for required environment variables
+  if (!latestVersion || !apkUrl) {
+    const missing = [];
+    if (!latestVersion) missing.push('APP_LATEST_VERSION');
+    if (!apkUrl) missing.push('APP_APK_URL');
+    return res.status(503).json({
+      success: false,
+      error: 'UPDATE_CONFIG_MISSING',
+      message: `Update server configuration incomplete: Missing ${missing.join(', ')}. Please configure these variables in the backend environment settings.`,
+    });
+  }
+
+  // 2. Validate semantic versioning format
+  const semverRegex = /^v?\d+(\.\d+)*(\-[0-9A-Za-z.-]+)?$/;
+  if (!semverRegex.test(latestVersion)) {
+    return res.status(500).json({
+      success: false,
+      error: 'INVALID_VERSION_FORMAT',
+      message: `APP_LATEST_VERSION '${latestVersion}' is not a valid semantic version (e.g. '1.0.0').`,
+    });
+  }
+  if (!semverRegex.test(minVersion)) {
+    return res.status(500).json({
+      success: false,
+      error: 'INVALID_MIN_VERSION_FORMAT',
+      message: `APP_MIN_SUPPORTED_VERSION '${minVersion}' is not a valid semantic version (e.g. '1.0.0').`,
+    });
+  }
+
+  // 3. Validate HTTPS URL for APK download
+  try {
+    const parsedUrl = new URL(apkUrl);
+    if (parsedUrl.protocol !== 'https:') {
+      return res.status(500).json({
+        success: false,
+        error: 'INSECURE_APK_URL',
+        message: 'APP_APK_URL must use secure HTTPS protocol to safeguard app downloads.',
+      });
+    }
+  } catch {
+    return res.status(500).json({
+      success: false,
+      error: 'INVALID_APK_URL',
+      message: 'APP_APK_URL is not a valid URL.',
+    });
+  }
+
+  // 4. Return validated public update manifest without exposing any secrets
+  return res.status(200).json({
+    success: true,
+    latestVersion,
+    minimumSupportedVersion: minVersion,
+    apkUrl,
+    releaseNotes,
+    updateRequired,
+    publishedAt,
   });
-});
-app.get('/api/version', (req, res) => res.redirect('/api/app/version'));
+};
+
+app.get('/api/app-update', handleAppUpdateCheck);
+app.get('/api/app/version', handleAppUpdateCheck);
+app.get('/api/version', (req, res) => res.redirect('/api/app-update'));
 
 // Storage Status & Cloud Storage Information
 app.get('/api/storage/status', (req, res) => {

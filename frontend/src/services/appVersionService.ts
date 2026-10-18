@@ -38,12 +38,17 @@ export function isVersionOlder(currentVersion: string, targetVersion: string): b
   return false;
 }
 
+// In-session cache to prevent redundant network requests and popup flickering
+let cachedCheckResult: AppUpdateCheckResult | null = null;
+let lastCheckTimestamp = 0;
+const CHECK_COOLDOWN_MS = 60 * 1000; // 1-minute cooldown between network checks
+
 /**
  * Fetches the remotely configured version/update manifest from the backend
  */
 export async function fetchAppVersionManifest(): Promise<AppVersionManifest | null> {
   try {
-    const endpoint = `${API_BASE_URL}/api/app/version`;
+    const endpoint = `${API_BASE_URL}/api/app-update`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
@@ -57,12 +62,12 @@ export async function fetchAppVersionManifest(): Promise<AppVersionManifest | nu
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn(`Version check returned status: ${response.status}`);
+      console.warn(`App update check returned status: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
-    if (!data || !data.latestVersion || !data.apkUrl) {
+    if (!data || data.success === false || !data.latestVersion || !data.apkUrl) {
       return null;
     }
 
@@ -80,10 +85,16 @@ export async function fetchAppVersionManifest(): Promise<AppVersionManifest | nu
 }
 
 /**
- * Checks if a new native APK update is available for this device
+ * Checks if a new native APK update is available for this device.
+ * Respects in-session caching to prevent repeated network requests on tab/screen switches.
  */
-export async function checkAppUpdateStatus(): Promise<AppUpdateCheckResult> {
+export async function checkAppUpdateStatus(forceRefresh = false): Promise<AppUpdateCheckResult> {
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
+
+  if (!forceRefresh && cachedCheckResult && Date.now() - lastCheckTimestamp < CHECK_COOLDOWN_MS) {
+    return cachedCheckResult;
+  }
+
   const manifest = await fetchAppVersionManifest();
 
   if (!manifest) {
@@ -97,12 +108,32 @@ export async function checkAppUpdateStatus(): Promise<AppUpdateCheckResult> {
 
   const isNewerVersionAvailable = isVersionOlder(currentVersion, manifest.latestVersion);
   const isBelowMinimumSupported = isVersionOlder(currentVersion, manifest.minimumSupportedVersion);
-  const isMandatory = isBelowMinimumSupported || Boolean(manifest.updateRequired);
 
-  return {
+  // If installed version is already current and not below minimum supported version, do not show update modal
+  if (!isNewerVersionAvailable && !isBelowMinimumSupported) {
+    const currentResult: AppUpdateCheckResult = {
+      isUpdateAvailable: false,
+      isMandatory: false,
+      currentVersion,
+      manifest,
+    };
+    cachedCheckResult = currentResult;
+    lastCheckTimestamp = Date.now();
+    return currentResult;
+  }
+
+  // Mandatory check:
+  // If APP_UPDATE_REQUIRED=true and installed is below APP_MIN_SUPPORTED_VERSION, OR if installed is below minimum supported version
+  const isMandatory = isBelowMinimumSupported || (Boolean(manifest.updateRequired) && isNewerVersionAvailable);
+
+  const result: AppUpdateCheckResult = {
     isUpdateAvailable: isNewerVersionAvailable || isMandatory,
     isMandatory,
     currentVersion,
     manifest,
   };
+
+  cachedCheckResult = result;
+  lastCheckTimestamp = Date.now();
+  return result;
 }
