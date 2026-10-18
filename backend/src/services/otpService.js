@@ -1,13 +1,12 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const crypto = require('crypto');
-const { Resend } = require('resend');
 
 /**
  * Real OTP Delivery Service for Padhlo
  * 
  * Supports:
- * 1. Resend HTTPS Email API (Cloud-native, 100% reliable on Render Free & production)
+ * 1. Brevo Transactional HTTPS Email API (Cloud-native, 100% reliable on Render Free & production)
  * 2. Twilio SMS API (Optional SMS delivery)
  * 
  * Security:
@@ -18,80 +17,50 @@ const { Resend } = require('resend');
 
 class OtpDeliveryService {
   constructor() {
-    this.resend = null;
     this.initEmailService();
   }
 
-  /**
-   * Resolves and normalizes the sender address.
-   * Prioritizes RESEND_FROM, falls back to EMAIL_FROM or default 'Padhlo Portal <onboarding@resend.dev>'
-   */
-  getSenderAddress() {
-    const raw = process.env.RESEND_FROM?.trim() || process.env.EMAIL_FROM?.trim();
-    if (!raw) {
-      return 'Padhlo Portal <onboarding@resend.dev>';
-    }
-
-    // Strip wrapping quotes around the entire string if present
-    const clean = raw.trim().replace(/^['"]|['"]$/g, '').trim();
-
-    // Match display name and email address: [Name] <email@domain.com>
-    const match = clean.match(/^(.*?)(?:<([^>]+)>)?$/);
-    if (match && match[2]) {
-      // Strip any quotes around the display name itself: "Padhlo Portal" -> Padhlo Portal
-      const displayName = match[1].replace(/['"]/g, '').trim();
-      const email = match[2].trim().toLowerCase();
-      return displayName ? `${displayName} <${email}>` : email;
-    }
-
-    // If only an email address was provided without angle brackets
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
-      return `Padhlo Portal <${clean.toLowerCase()}>`;
-    }
-
-    return clean;
-  }
-
   initEmailService() {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
+    const apiKey = process.env.BREVO_API_KEY?.trim();
+    const senderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
+    const senderName = process.env.BREVO_SENDER_NAME?.trim() || 'Padhlo Portal';
 
     if (apiKey) {
-      this.resend = new Resend(apiKey);
-      const sender = this.getSenderAddress();
-      const safeSender = sender.replace(/<([^@>]+)@([^>]+)>/, (m, u, d) => `<***@${d}>`);
-      console.log(`📧 Resend HTTPS Email API initialized (Sender: ${safeSender}, KeyConfigured: true)`);
+      const safeEmail = senderEmail
+        ? senderEmail.replace(/^([^@]+)@(.*)$/, (m, u, d) => `***@${d}`)
+        : 'not_set';
+      console.log(`📧 Brevo HTTPS Email API initialized (Sender: ${senderName} <${safeEmail}>, KeyConfigured: true)`);
     } else {
-      console.warn('ℹ️ RESEND_API_KEY not detected in backend environment.');
-      this.resend = null;
+      console.warn('ℹ️ BREVO_API_KEY not detected in backend environment.');
     }
   }
 
   /**
-   * Verifies Resend Email API status
+   * Verifies Brevo Email API configuration status
    */
   async verifyEmailConnection() {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
+    const apiKey = process.env.BREVO_API_KEY?.trim();
     if (!apiKey) {
       return {
         configured: false,
         verified: false,
-        error: 'RESEND_API_KEY is not configured in backend environment.',
+        error: 'BREVO_API_KEY is not configured in backend environment.',
       };
     }
 
-    const fromAddress = this.getSenderAddress();
-    if (!fromAddress) {
+    const senderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
+    if (!senderEmail) {
       return {
         configured: true,
         verified: false,
-        error: 'RESEND_FROM is missing or empty in backend environment. A verified sender address is required.',
+        error: 'BREVO_SENDER_EMAIL is missing or empty in backend environment. A verified sender email is required.',
       };
     }
 
     return {
       configured: true,
       verified: true,
-      provider: 'RESEND_HTTPS_API',
+      provider: 'BREVO_HTTPS_API',
       senderConfigured: true,
     };
   }
@@ -154,12 +123,12 @@ class OtpDeliveryService {
   }
 
   /**
-   * Sends real OTP to Email via Resend HTTPS Email API
+   * Sends real OTP to Email via Brevo Transactional HTTPS Email API
    * Never logs OTP codes or secrets
    */
   async sendEmailOtp(email, otp, purpose = 'Verification') {
     const cleanEmail = email.toLowerCase().trim();
-    const appName = 'Padhlo Portal';
+    const appName = process.env.BREVO_SENDER_NAME?.trim() || 'Padhlo Portal';
 
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; background: #0B0C10; color: #FFFFFF; border-radius: 12px; border: 1px solid #1F2330;">
@@ -182,52 +151,74 @@ class OtpDeliveryService {
       </div>
     `;
 
-    // 1. Validate Resend client
-    if (!this.resend) {
-      const apiKey = process.env.RESEND_API_KEY?.trim();
-      if (apiKey) {
-        this.resend = new Resend(apiKey);
-      } else {
-        console.error('❌ Resend API key missing: set RESEND_API_KEY in backend environment.');
-        return {
-          success: false,
-          error: 'Email delivery service is not configured on the server. Please set RESEND_API_KEY in Render environment variables.',
-        };
-      }
-    }
+    const textContent = `Your ${appName} OTP is: ${otp}. It is valid for 5 minutes. Do not share it with anyone.`;
 
-    const fromAddress = this.getSenderAddress();
-
-    try {
-      const { data, error } = await this.resend.emails.send({
-        from: fromAddress,
-        to: [cleanEmail],
-        subject: `${otp} is your ${appName} ${purpose} Code`,
-        text: `Your ${appName} OTP is: ${otp}. It is valid for 5 minutes. Do not share it with anyone.`,
-        html: htmlContent,
-      });
-
-      // Strict validation: Must not have error, and data must contain message id
-      if (error || !data || !data.id) {
-        const errorMsg = error?.message || error?.name || 'Resend did not return a confirmation ID.';
-        console.error('❌ Resend API error response:', errorMsg);
-        return {
-          success: false,
-          error: `Resend email delivery failed: ${errorMsg}`,
-        };
-      }
-
-      console.log(`✅ Real email OTP successfully dispatched via Resend HTTPS API (Message ID: ${data.id})`);
-      return {
-        success: true,
-        mode: 'resend_https_api',
-        id: data.id,
-      };
-    } catch (err) {
-      console.error('❌ Resend API delivery exception:', err.message || 'Network exception');
+    const apiKey = process.env.BREVO_API_KEY?.trim();
+    if (!apiKey) {
+      console.error('❌ Brevo API key missing: set BREVO_API_KEY in backend environment.');
       return {
         success: false,
-        error: `Resend delivery failed: ${err.message || 'Network error'}`,
+        error: 'Email delivery service is not configured on the server. Please set BREVO_API_KEY in Render environment variables.',
+      };
+    }
+
+    const senderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
+    if (!senderEmail) {
+      console.error('❌ Brevo sender email missing: set BREVO_SENDER_EMAIL in backend environment.');
+      return {
+        success: false,
+        error: 'Sender email is not configured on the server. Please set BREVO_SENDER_EMAIL in Render environment variables.',
+      };
+    }
+
+    const senderName = process.env.BREVO_SENDER_NAME?.trim() || 'Padhlo Portal';
+
+    try {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: senderName,
+            email: senderEmail,
+          },
+          to: [
+            {
+              email: cleanEmail,
+            },
+          ],
+          subject: `${otp} is your ${appName} ${purpose} Code`,
+          htmlContent,
+          textContent,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data || !data.messageId) {
+        const errorMsg = data?.message || data?.code || `Brevo API returned status ${response.status}`;
+        console.error('❌ Brevo API error response:', errorMsg);
+        return {
+          success: false,
+          error: `Brevo email delivery failed: ${errorMsg}`,
+        };
+      }
+
+      console.log(`✅ Real email OTP successfully dispatched via Brevo HTTPS API (Message ID: ${data.messageId})`);
+      return {
+        success: true,
+        mode: 'brevo_https_api',
+        id: data.messageId,
+      };
+    } catch (err) {
+      console.error('❌ Brevo API delivery exception:', err.message || 'Network exception');
+      return {
+        success: false,
+        error: `Brevo delivery failed: ${err.message || 'Network error'}`,
       };
     }
   }
